@@ -15,7 +15,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "stocks.db")
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+DB_PATH = "/tmp/stocks.db" if IS_VERCEL else os.path.join(BASE_DIR, "stocks.db")
 
 DEFAULT_TICKER = "AAPL"
 CACHE_TTL = 300  # seconds
@@ -549,8 +550,22 @@ def start_scheduler():
     return scheduler
 
 
-init_db()
-start_scheduler()
+# Only initialize DB and start scheduler outside of Vercel serverless.
+# On Vercel the filesystem is read-only (except /tmp) and background
+# processes are not supported, so we defer DB init to the first request
+# and skip the scheduler entirely there.
+if IS_VERCEL:
+    _db_initialized = False
+
+    @app.before_request
+    def _ensure_db():
+        global _db_initialized
+        if not _db_initialized:
+            init_db()
+            _db_initialized = True
+else:
+    init_db()
+    start_scheduler()
 
 
 if __name__ == "__main__":
