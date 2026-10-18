@@ -1,0 +1,146 @@
+:root {
+    --sidebar-width: 260px;
+    --bg-dark: #0b0e11;
+    --card-bg: #141921;
+    --accent: #00d4ff;
+}
+
+body {
+    background: var(--bg-dark);
+    color: #e8e8ea;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+.wrapper {
+    display: flex;
+    min-height: 100vh;
+}
+
+.sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    background: #11161e;
+    border-right: 1px solid #232a34;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    overflow-y: auto;
+}
+
+.sidebar-brand {
+    font-size: 1.25rem;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #232a34;
+}
+
+.sidebar .nav-link {
+    color: #b9bfc6;
+    border-radius: 8px;
+    margin: 0 8px;
+}
+
+.sidebar .nav-link.active {
+    background: rgba(0, 212, 255, 0.12);
+    color: var(--accent);
+}
+
+.sidebar .nav-link:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: #ffffff;
+}
+
+.sidebar h6 {
+    font-size: 0.75rem;
+    letter-spacing: 1px;
+}
+
+.sidebar .list-group-item {
+    background: transparent;
+    border: none;
+    color: #c9cfd6;
+    padding: 0.55rem 1rem;
+    border-radius: 8px;
+    margin: 0 8px 4px 8px;
+}
+
+.sidebar .list-group-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+    color: #ffffff;
+}
+
+.sidebar .list-group-item a {
+    color: inherit;
+}
+
+main {
+    background: var(--bg-dark);
+    min-height: 100vh;
+}
+
+.kpi-card {
+    background: var(--card-bg);
+    border: 1px solid #232a34;
+    border-radius: 12px;
+    padding: 1rem;
+    height: 100%;
+}
+
+.card {
+    background: var(--card-bg);
+    border: 1px solid #232a34;
+    border-radius: 12px;
+}
+
+.card-header {
+    background: transparent;
+    border-bottom: 1px solid #232a34;
+    color: #ffffff;
+    font-size: 0.9rem;
+}
+
+.table-dark {
+    color: #e8e8ea;
+}
+
+.table-dark thead th {
+    border-bottom: 1px solid #232a34;
+    color: #9aa3ad;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.table-dark tbody td {
+    border-top: 1px solid #1c222a;
+}
+
+.btn-close-white {
+    filter: invert(1);
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+.chart-card .card-body {
+    background: #0b0e11;
+}
+
+.text-\[.*\] { /* utility guard */ }
+
+@media (max-width: 991.98px) {
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 1050;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+        box-shadow: 4px 0 12px rgba(0,0,0,0.4);
+    }
+    main {
+        padding-left: 0 !important;
+    }
+}

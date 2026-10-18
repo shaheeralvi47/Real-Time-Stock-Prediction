@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Monitor &mdash; {{ ticker }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="d-flex wrapper">
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-brand p-3 mb-3 text-center">
+            <span class="fw-bold text-primary">STOCK</span><span class="fw-bold">MONITOR</span>
+        </div>
+        <ul class="list-unstyled nav-pills">
+            <li class="nav-item mb-2">
+                <a class="nav-link text-white active" href="{{ url_for('index') }}"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a>
+            </li>
+        </ul>
+
+        <div class="p-3 border-top">
+            <form method="GET" action="{{ url_for('index') }}" class="d-flex mb-3" onsubmit="return validateTicker(this)">
+                <input name="ticker" class="form-control form-control-sm" placeholder="Ticker (e.g. AAPL)"
+                       value="{{ ticker }}" required>
+                <button class="btn btn-primary btn-sm px-3"><i class="bi bi-search"></i></button>
+            </form>
+            {% if error %}
+            <div class="alert alert-danger text-sm mb-3">{{ error }}</div>
+            {% endif %}
+
+            <h6 class="text-muted small fw-bold text-uppercase mb-2">Watchlist</h6>
+            <ul class="list-group list-group-flush mb-3" id="watchlist-list">
+                {% for w in watchlist %}
+                <li class="list-group-item list-group-item-action d-flex justify-content-between align-items-bg"
+                    style="background: rgba(255,255,255,0.05);">
+                    <span><a href="{{ url_for('index', ticker=w.ticker) }}" class="text-white text-decoration-none">{{ w.ticker }}</a></span>
+                    <span class="badge bg-primary" id="wl-{{ w.ticker }}">--</span>
+                    <form method="POST" action="{{ url_for('watchlist_remove', ticker=w.ticker) }}"
+                          class="d-inline ms-2" onsubmit="return confirm('Remove {{ w.ticker }}?')">
+                        <button class="btn btn-sm text-danger p-1"><i class="bi bi-trash"></i></button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+
+            <h6 class="text-muted small fw-bold text-uppercase mb-2">Add Alert</h6>
+            <form method="POST" action="{{ url_for('alerts_add') }}" class="row g-2 mb-3">
+                <div class="col-4">
+                    <input name="ticker" class="form-control form-control-sm" placeholder="Ticker" required>
+                </div>
+                <div class="col-3">
+                    <select name="alert_type" class="form-select form-select-sm">
+                        <option value="above">Price &ge;</option>
+                        <option value="below">Price &le;</option>
+                        <option value="change_pct">Change &ge; %</option>
+                    </select>
+                </div>
+                <div class="col-4">
+                    <input name="threshold" class="form-control form-control-sm" placeholder="Value" step="any" required>
+                </div>
+                <div class="col-12">
+                    <button class="btn btn-outline-warning btn-sm w-100"><i class="bi bi-bell"></i> Add</button>
+                </div>
+            </form>
+
+            <h6 class="text-muted small fw-bold text-uppercase mb-2">Active Alerts</h6>
+            <ul class="list-group list-group-flush mb-3">
+                {% for a in alerts %}
+                <li class="list-group-item small" style="background: rgba(255,255,255,0.05);">
+                    {{ a.ticker }} {{ '&#8805;' if a.alert_type=='above' else '&#8804;' if a.alert_type=='below' else '' }}
+                    {{ a.threshold }}{% if a.alert_type=='change_pct' %}%{% endif %}
+                    {% if a.triggered %}<span class="badge bg-danger">TRIGGERED</span>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+
+            <h6 class="text-muted small fw-bold text-uppercase mb-2">Refresh</h6>
+            <form method="POST" action="{{ url_for('settings_refresh') }}" class="d-flex mb-3">
+                <input name="refresh_interval" class="form-control form-control-sm me-2" value="{{ refresh_interval }}" min="15" step="any" placeholder="s">
+                <button class="btn btn-outline-secondary btn-sm px-3">Set</button>
+            </form>
+            <div class="text-muted small text-center">
+                Last updated: <span id="last-updated">{{ quote.fetched_at if quote else '--' }}</span><br>
+                Source: Yahoo Finance (latest available, may be delayed)
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="flex-grow-1 container-fluid p-3">
+        <!-- Toast container -->
+        <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1060;">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% for category, message in messages %}
+            <div class="toast align-items-center text-bg-{% if category == 'error' %}danger{% elif category == 'success' %}success{% else %}info{% endif %} border-0" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">{{ message }}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            </div>
+            {% endfor %}
+            {% endwith %}
+        </div>
+
+        {% if quote %}
+        <!-- KPI Cards -->
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="kpi-card">
+                    <div class="text-muted small fw-bold">Latest Price</div>
+                    <div class="fw-bold fs-4" id="kpi-price">{{ "%.2f"|format(quote.price) }}</div> {{ quote.ticker }}
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="kpi-card">
+                    <div class="text-muted small fw-bold">Daily Change</div>
+                    <div class="fw-bold fs-4 text-{% if quote.change >= 0 %}success{% else %}danger{% endif %}" id="kpi-change">
+                        {% if quote.change >= 0 %}+{% endif %}{{ "%.2f"|format(quote.change) }}
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="kpi-card">
+                    <div class="text-muted small fw-bold">Change %</div>
+                    <div class="fw-bold fs-4 text-{% if quote.change_pct >= 0 %}success{% else %}danger{% endif %}" id="kpi-pct">
+                        {% if quote.change_pct >= 0 %}+{% endif %}{{ "%.2f"|format(quote.change_pct) }}%
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="kpi-card">
+                    <div class="text-muted small fw-bold">Volume</div>
+                    <div class="fw-bold fs-5" id="kpi-vol">{{ "{:,}".format(quote.volume) }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <!-- Chart -->
+            <div class="col-lg-8">
+                <div class="card chart-card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">{{ ticker }} &mdash; Historical Price with Indicators &amp; 5-Day Forecast</span>
+                        <span class="badge bg-info text-dark">Experimental estimates &mdash; not financial advice</span>
+                    </div>
+                    <div class="card-body p-0" style="min-height: 520px;">
+                        {{ chart_html | safe }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Indicators & Forecast -->
+            <div class="col-lg-4">
+                <div class="card h-100 mb-3">
+                    <div class="card-header fw-bold">Technical Indicators</div>
+                    <div class="card-body p-3">
+                        <table class="table table-sm table-borderless align-middle mb-0">
+                            <tr><td class="text-muted">SMA 20</td><td class="fw-bold">{{ "%.2f"|format(indicators.sma20) if indicators and indicators.sma20 is not none else '--' }}</td></tr>
+                            <tr><td class="text-muted">SMA 50</td><td class="fw-bold">{{ "%.2f"|format(indicators.sma50) if indicators and indicators.sma50 is not none else '--' }}</td></tr>
+                            <tr><td class="text-muted">RSI (14)</td><td class="fw-bold text-{% if indicators and indicators.rsi is not none and indicators.rsi >= 70 %}danger{% elif indicators and indicators.rsi is not none and indicators.rsi <= 30 %}success{% else %}muted{% endif %}">{{ "%.1f"|format(indicators.rsi) if indicators and indicators.rsi is not none else '--' }}</td></tr>
+                            <tr><td class="text-muted">MACD</td><td class="fw-bold">{{ "%.4f"|format(indicators.macd) if indicators and indicators.macd is not none else '--' }}</td></tr>
+                            <tr><td class="text-muted">Signal</td><td class="fw-bold">{{ "%.4f"|format(indicators.macd_signal) if indicators and indicators.macd_signal is not none else '--' }}</td></tr>
+                        </table>
+                        <p class="text-muted small mt-2">SMA/RSI/MACD computed with Pandas from daily closes.</p>
+                    </div>
+                </div>
+
+                <div class="card h-100">
+                    <div class="card-header fw-bold">5-Session Forecast (Linear Regression)</div>
+                    <div class="card-body p-3">
+                        {% if forecast_rows %}
+                        <table class="table table-sm table-borderless align-middle mb-0">
+                            <thead><tr><th class="text-muted">Session</th><th class="fw-bold">Est. Price</th></tr></thead>
+                            <tbody>
+                            {% for d, p in forecast_rows %}
+                            <tr><td>{{ d }}</td><td class="text-warning">${{ "%.2f"|format(p) }}</td></tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <p class="text-muted small mb-0">Insufficient history for a forecast.</p>
+                        {% endif %}
+                        <p class="text-muted small mt-2">Lag-1&hellip;lag-5 features, chronological training (no future leakage). Labels are experimental estimates.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Watchlist prices row -->
+        <div class="card mt-4">
+            <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+                <span>Watchlist Prices (cached 5 min)</span>
+                <a href="{{ url_for('index', ticker=ticker) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-clockwise"></i> Refresh</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-dark table-hover mb-0">
+                    <thead><tr><th>Ticker</th><th>Price</th><th>Change</th><th>%</th><th>Volume</th><th>Action</th></tr></thead>
+                    <tbody>
+                    {% for w in watchlist %}
+                    <tr>
+                        <td><a href="{{ url_for('index', ticker=w.ticker) }}" class="text-warning text-decoration-none">{{ w.ticker }}</a></td>
+                        <td id="wl-price-{{ w.ticker }}">{{ "%.2f"|format(w.price) if w.price else '--' }}</td>
+                        <td class="text-{% if w.change and w.change >= 0 %}success{% elif w.change %}danger{% else %}muted{% endif %}">
+                            {% if w.change is not none and w.change >= 0 %}+{% endif %}{{ "%.2f"|format(w.change) if w.change is not none else '--' }}</td>
+                        <td>{{ "%.2f"|format(w.change_pct) if w.change_pct is not none else '--' }}%</td>
+                        <td>{{ "{:,}".format(w.volume) if w.volume is not none else '--' }}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('watchlist_remove', ticker=w.ticker) }}" class="d-inline"
+                                  onsubmit="return confirm('Remove {{ w.ticker }}?')">
+                                <button class="btn btn-sm text-danger p-1"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not watchlist %}
+                    <tr><td class="text-muted text-center" colspan="6">Watchlist is empty. Add tickers from the sidebar.</td></tr>
+                    {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Triggered alerts -->
+        {% if triggered_alerts %}
+        <div class="card mt-4 border-danger">
+            <div class="card-header bg-danger text-white fw-bold"><i class="bi bi-bell-fill"></i> Triggered Alerts</div>
+            <div class="list-group list-group-flush">
+                {% for a in triggered_alerts %}
+                <div class="list-group-item list-group-item-danger d-flex justify-content-between align-items-center">
+                    <span>{{ a.ticker }} &mdash; {{ a.alert_type }} {{ a.threshold }}{% if a.alert_type == 'change_pct' %}%{% endif %}</span>
+                    <span class="badge bg-dark">Triggered</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-6 text-center">
+                <div class="card">
+                    <div class="card-body p-5">
+                        <h2 class="text-muted"><i class="bi bi-graph-down"></i></h2>
+                        <h4>{{ error or 'No data available' }}</h4>
+                        <p class="text-muted">Enter a valid ticker symbol (e.g. AAPL, TSLA, MSFT, NVDA) in the sidebar.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Auto-refresh latest quote
+    const ticker = {{ ticker | tojson }};
+    const intervalSec = {{ refresh_interval }};
+    const tickerInput = document.querySelector('input[name="ticker"]');
+
+    function updateLastUpdated() {
+        const el = document.getElementById('last-updated');
+        if (el) el.textContent = new Date().toLocaleString();
+    }
+
+    async function refreshQuote() {
+        try {
+            const res = await fetch('/api/quote/' + encodeURIComponent(ticker), { cache: 'no-store' });
+            if (!res.ok) return;
+            const q = await res.json();
+            document.getElementById('kpi-price').textContent = q.price.toFixed(2);
+            const chgEl = document.getElementById('kpi-change');
+            const pctEl = document.getElementById('kpi-pct');
+            chgEl.textContent = (q.change >= 0 ? '+' : '') + q.change.toFixed(2);
+            pctEl.textContent = (q.change_pct >= 0 ? '+' : '') + q.change_pct.toFixed(2) + '%';
+            [chgEl, pctEl].forEach(el => {
+                el.className = 'fw-bold fs-4 text-' + (q.change >= 0 ? 'success' : 'danger');
+            });
+            document.getElementById('kpi-vol').textContent = q.volume.toLocaleString();
+            updateLastUpdated();
+        } catch (e) {
+            console.warn('Refresh failed', e);
+        }
+    }
+
+    setInterval(refreshQuote, intervalSec * 1000);
+
+    // Auto-dismiss toasts
+    document.querySelectorAll('.toast').forEach(t => {
+        const bs = new bootstrap.Toast(t, { delay: 5000 });
+        bs.show();
+    });
+
+    function validateTicker(form) {
+        const input = form.querySelector('input[name="ticker"]');
+        if (!input.value.trim()) { alert('Enter a ticker symbol'); return false; }
+        input.value = input.value.trim().toUpperCase();
+        return true;
+    }
+</script>
+</body>
+</html>
